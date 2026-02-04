@@ -9,4 +9,4 @@
 	url = https://github.com/wadoon/key-citool.git
 [submodule "libs/verifast"]
 	path = libs/verifast
-	url = git@github.com:verifast/verifast.git
+	url = https://github.com/verifast/verifast.git

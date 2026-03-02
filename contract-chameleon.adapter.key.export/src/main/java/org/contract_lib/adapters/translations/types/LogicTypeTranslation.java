@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.type.Type;
+import com.google.auto.service.AutoService;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 
 import org.contract_lib.adapters.translations.TypeTranslation;

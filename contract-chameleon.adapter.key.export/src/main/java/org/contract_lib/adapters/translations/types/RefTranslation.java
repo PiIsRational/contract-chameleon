@@ -7,12 +7,14 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
+import com.google.auto.service.AutoService;
 
 import org.contract_lib.adapters.translations.TypeTranslation;
 import org.contract_lib.lang.contract_lib.ast.Sort;
 
 import org.contract_lib.lang.key.ast.KeySort;
 
+@AutoService(TypeTranslation.class)
 public class RefTranslation implements TypeTranslation {
 
   public Sort getClibSort() {

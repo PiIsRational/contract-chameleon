@@ -10,10 +10,13 @@ import org.contract_lib.lang.contract_lib.ast.Symbol;
 
 import org.contract_lib.lang.verifast.ast.VeriFastType;
 
+import com.google.auto.service.AutoService;
+
 import static org.contract_lib.adapters.translation.TermTranslation.UnaryOperatorTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.BinaryOperatorTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.FixpointOperatorTranslation;
 
+@AutoService(TermTranslationProvider.class)
 public final record SetTermTranslation() implements TermTranslationProvider {
 
   public final static Sort.Type CLIB_BOOLEAN = new Sort.Type("Bool");

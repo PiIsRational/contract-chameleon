@@ -10,9 +10,12 @@ import org.contract_lib.lang.contract_lib.ast.Symbol;
 
 import org.contract_lib.lang.verifast.ast.VeriFastType;
 
+import com.google.auto.service.AutoService;
+
 import static org.contract_lib.adapters.translation.TermTranslation.UnaryOperatorTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.BinaryOperatorTranslation;
 
+@AutoService(TermTranslationProvider.class)
 public final record IntTermTranslation() implements TermTranslationProvider {
 
   public final static Sort.Type CLIB_INT = new Sort.Type("Int");

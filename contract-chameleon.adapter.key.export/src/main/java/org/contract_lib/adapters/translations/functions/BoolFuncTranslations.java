@@ -5,6 +5,7 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 
 import com.github.javaparser.ast.type.Type;
+import com.google.auto.service.AutoService;
 import com.github.javaparser.ast.type.PrimitiveType;
 
 import org.contract_lib.adapters.translations.FuncProvider;
@@ -14,6 +15,7 @@ import org.contract_lib.lang.contract_lib.ast.Sort;
 import static org.contract_lib.adapters.translations.FuncTranslation.UnaryTranslation;
 import static org.contract_lib.adapters.translations.FuncTranslation.BinaryTranslation;
 
+@AutoService(FuncProvider.class)
 public record BoolFuncTranslations() implements FuncProvider {
 
   static final Sort CLIB_BOOLEAN_TYPE = new Sort.Type("Bool");

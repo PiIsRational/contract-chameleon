@@ -8,6 +8,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.Expression;
 
 import com.github.javaparser.ast.type.Type;
+import com.google.auto.service.AutoService;
 import com.github.javaparser.ast.type.PrimitiveType;
 
 import com.github.javaparser.ast.expr.SimpleName;
@@ -19,6 +20,7 @@ import org.contract_lib.lang.contract_lib.ast.Sort;
 import org.contract_lib.lang.key.ast.KeySort;
 
 //TODO: Yes, one could just use the correct math mode, but I kind of like this approach :)
+@AutoService(TypeTranslation.class)
 public class BoundedIntTranslation implements TypeTranslation {
 
   public Sort getClibSort() {

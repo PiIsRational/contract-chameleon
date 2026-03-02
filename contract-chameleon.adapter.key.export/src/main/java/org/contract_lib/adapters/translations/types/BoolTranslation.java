@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.github.javaparser.ast.expr.Expression;
 
 import com.github.javaparser.ast.type.Type;
+import com.google.auto.service.AutoService;
 import com.github.javaparser.ast.type.PrimitiveType;
 
 import org.contract_lib.adapters.translations.TypeTranslation;
@@ -13,6 +14,7 @@ import org.contract_lib.lang.contract_lib.ast.Sort;
 
 import org.contract_lib.lang.key.ast.KeySort;
 
+@AutoService(TypeTranslation.class)
 public class BoolTranslation implements TypeTranslation {
   public Sort getClibSort() {
     return new Sort.Type("Bool");

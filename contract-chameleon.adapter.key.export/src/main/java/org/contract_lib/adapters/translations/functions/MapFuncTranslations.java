@@ -3,6 +3,7 @@ package org.contract_lib.adapters.translations.functions;
 import java.util.List;
 
 import com.github.javaparser.ast.type.Type;
+import com.google.auto.service.AutoService;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -18,6 +19,7 @@ import org.contract_lib.adapters.translations.FuncTranslation;
 import org.contract_lib.lang.contract_lib.ast.Sort;
 import org.contract_lib.lang.contract_lib.ast.Term;
 
+@AutoService(FuncProvider.class)
 public record MapFuncTranslations() implements FuncProvider {
 
   static final Sort CLIB_MAP_TYPE = new Sort.Type("Map");

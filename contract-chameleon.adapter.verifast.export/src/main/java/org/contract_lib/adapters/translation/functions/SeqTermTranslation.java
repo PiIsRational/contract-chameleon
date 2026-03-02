@@ -12,12 +12,15 @@ import org.contract_lib.lang.contract_lib.ast.Symbol;
 import org.contract_lib.lang.verifast.ast.VeriFastExpression;
 import org.contract_lib.lang.verifast.ast.VeriFastType;
 
+import com.google.auto.service.AutoService;
+
 import static org.contract_lib.adapters.translation.TermTranslation.UnaryOperatorTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.BinaryOperatorTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.FixpointOperatorTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.ConstantTranslation;
 import static org.contract_lib.adapters.translation.TermTranslation.VeriFastExpressionTranslation;
 
+@AutoService(TermTranslationProvider.class)
 public final record SeqTermTranslation() implements TermTranslationProvider {
 
   public final static Sort.Type CLIB_BOOLEAN = new Sort.Type("Bool");

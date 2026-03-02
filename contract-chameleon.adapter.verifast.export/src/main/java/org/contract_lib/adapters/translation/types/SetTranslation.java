@@ -9,6 +9,9 @@ import org.contract_lib.lang.contract_lib.ast.Sort;
 import org.contract_lib.lang.verifast.ast.VeriFastExpression;
 import org.contract_lib.lang.verifast.ast.VeriFastType;
 
+import com.google.auto.service.AutoService;
+
+@AutoService(TypeTranslation.class)
 public final class SetTranslation implements TypeTranslation {
 
   public Sort getClibSort() {

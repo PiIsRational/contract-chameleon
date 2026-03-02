@@ -1,3 +1,8 @@
+/*dependencies {
+   
+  runtimeOnly project(":contract-chameleon.adapter.verifast.export")
+  runtimeOnly project(":contract-chameleon.adapter.key.import")
+}*/
 
 ext.integrationTasks = []
 
@@ -9,7 +14,10 @@ def runIntegrationTest(String taskName, List<String> argList) {
         dependsOn "${appModule}:classes"
 
         def sub = project(appModule)
-        classpath = sub.sourceSets.main.runtimeClasspath
+        classpath = sub.sourceSets.main.runtimeClasspath +
+          project(":contract-chameleon.adapter.key.export").sourceSets.main.runtimeClasspath +
+          project(":contract-chameleon.adapter.key.import").sourceSets.main.runtimeClasspath +
+          project(":contract-chameleon.adapter.verifast.export").sourceSets.main.runtimeClasspath
         mainClass.set(sub.application.mainClass)
 
         args = argList

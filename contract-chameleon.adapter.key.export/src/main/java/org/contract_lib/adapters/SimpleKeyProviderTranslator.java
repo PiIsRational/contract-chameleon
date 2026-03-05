@@ -326,7 +326,7 @@ public class SimpleKeyProviderTranslator {
     dec.addMember(accessInv);
   }
 
-  private void addImplementationFootprint(ClassOrInterfaceDeclaration dec, Abstraction abstraction) {
+  protected void addImplementationFootprint(ClassOrInterfaceDeclaration dec, Abstraction abstraction) {
     DatatypeDec dt = abstraction.datatypeDec();
     if (dt.constructors().size() != 1) {
       System.err.println("Only datatypes with one constructor are allowed.");
@@ -508,18 +508,18 @@ public class SimpleKeyProviderTranslator {
   }
 
   private boolean isInPrecondition(ArgumentMode am) {
-    return am.equals(ArgumentMode.IN) | am.equals(ArgumentMode.INOUT);
+    return am.equals(ArgumentMode.IN) || am.equals(ArgumentMode.INOUT);
   }
 
   private boolean isInPostcondition(ArgumentMode am) {
     return true;
   }
 
-  private boolean isAssignable(ArgumentMode am) {
-    return am.equals(ArgumentMode.OUT) | am.equals(ArgumentMode.INOUT);
+  protected boolean isAssignable(ArgumentMode am) {
+    return am.equals(ArgumentMode.OUT) || am.equals(ArgumentMode.INOUT);
   }
 
-  private boolean isAccessible(ArgumentMode am) {
+  protected boolean isAccessible(ArgumentMode am) {
     return true;
   }
 
@@ -527,17 +527,21 @@ public class SimpleKeyProviderTranslator {
     return !formal.identifier().identifier().equals("result");
   }
 
-  private boolean isReference(Formal formal, VariableTranslator variableScope) {
-    Optional<VariableScope> variable = variableScope.translate(formal.identifier());
+  protected boolean isReference(Formal formal, VariableTranslator variableScope) {
+      return isReference(formal.identifier(), variableScope);
+  }
+
+  protected boolean isReference(Symbol sym, VariableTranslator variableScope) {
+    Optional<VariableScope> variable = variableScope.translate(sym);
     VariableScope expr = variable.orElseGet(() -> {
-      System.err.println(String.format("ERROR: Identifier value not found: %s", formal.identifier()));
+      System.err.println(String.format("ERROR: Identifier value not found: %s", sym));
       //TODO: Provide proper translation
       return new VariableScopeElement(null, null, null, null, false);
     });
     return expr.hasFootprint();
   }
 
-  private JmlClause translateAssignableAccessibleClause(
+  protected JmlClause translateAssignableAccessibleClause(
       Formal formal,
       JmlClauseKind kind,
       VariableTranslator variableScope) {
@@ -559,7 +563,7 @@ public class SimpleKeyProviderTranslator {
             new SimpleName("footprint")));
   }
 
-  private List<JmlClause> translateAccessible(
+  protected List<JmlClause> translateAccessible(
       List<Formal> formals,
       VariableTranslator variableScope) {
 
@@ -574,7 +578,7 @@ public class SimpleKeyProviderTranslator {
     return accessible;
   }
 
-  private List<JmlClause> translateAssignable(
+  protected List<JmlClause> translateAssignable(
       List<Formal> formals,
       VariableTranslator variableScope) {
 
@@ -589,7 +593,7 @@ public class SimpleKeyProviderTranslator {
     return assignable;
   }
 
-  private List<JmlClause> disjuntClauses(
+  protected List<JmlClause> disjuntClauses(
       JmlClauseKind kind,
       List<Formal> formals,
       Predicate<ArgumentMode> filter,
@@ -631,7 +635,7 @@ public class SimpleKeyProviderTranslator {
             new FieldAccessExpr(b, "footprint")));
   }
 
-  private Optional<JmlClause> objectCreated(List<Formal> formals, VariableTranslator variableScope) {
+  protected Optional<JmlClause> objectCreated(List<Formal> formals, VariableTranslator variableScope) {
 
     return formals.stream()
         .filter((f) -> isReference(f, variableScope))
@@ -718,6 +722,8 @@ public class SimpleKeyProviderTranslator {
 
     ClassOrInterfaceDeclaration classImpl = abstractionImpementations.get(classIdentifier);
 
+    List<Parameter> parameters = getParameters(variableScope);
+
     if (methodSignaturExtractor.isStatic()) {
       System.err.println("Static constructor method found");
       Statement returnStmt;
@@ -726,7 +732,7 @@ public class SimpleKeyProviderTranslator {
         returnStmt.setLineComment("NOTE: This should be never called, as it is only the interface!");
       } else {
 
-        List<Expression> args = variableScope.parameters.stream().map(p -> new NameExpr(p.getNameAsString()))
+        List<Expression> args = parameters.stream().map(p -> new NameExpr(p.getNameAsString()))
             .collect(Collectors.toList());
         EmptyStmt em = new EmptyStmt();
 
@@ -735,7 +741,7 @@ public class SimpleKeyProviderTranslator {
         NodeList<Statement> nl = NodeList.nodeList(em);
         BlockStmt body = new BlockStmt(nl);
         classImpl.addConstructor()
-            .setParameters(NodeList.nodeList(variableScope.parameters))
+            .setParameters(NodeList.nodeList(parameters))
             .setBody(body)
             .setContracts(contracts);
 
@@ -752,7 +758,7 @@ public class SimpleKeyProviderTranslator {
           .addMethod(methodIdentifier)
           .setBody(body)
           .setType(returnType)
-          .setParameters(NodeList.nodeList(variableScope.parameters))
+          .setParameters(NodeList.nodeList(parameters))
           .setPublic(true)
           .setStatic(true)
           .setContracts(contracts);
@@ -762,7 +768,7 @@ public class SimpleKeyProviderTranslator {
           .addMethod(methodIdentifier)
           .setBody(null)
           .setType(returnType)
-          .setParameters(NodeList.nodeList(variableScope.parameters))
+          .setParameters(NodeList.nodeList(parameters))
           .setPublic(true)
           .setAbstract(true)
           .setContracts(contracts);
@@ -779,11 +785,15 @@ public class SimpleKeyProviderTranslator {
         MethodDeclaration methodDeclImpl = classImpl
             .addMethod(methodIdentifier)
             .setType(returnType)
-            .setParameters(NodeList.nodeList(variableScope.parameters))
+            .setParameters(NodeList.nodeList(parameters))
             .setBody(blueprintStatement)
             .setPublic(true);
       }
     }
+  }
+
+  protected List<Parameter> getParameters(VariableScopeManager variableScope) {
+    return variableScope.parameters;
   }
 
   Expression translateTerm(
@@ -1064,12 +1074,12 @@ public class SimpleKeyProviderTranslator {
   }
 
   //TODO: This is just a most simple implementation, might be reworked, but serves it purpose for now
-  private final class VariableScopeManager implements VariableScope.VariableTranslator {
+  protected final class VariableScopeManager implements VariableScope.VariableTranslator {
 
-    Map<String, VariableScope> map = new HashMap<>();
-    Optional<Type> returnType = Optional.empty();
-    Optional<Type> ownerType = Optional.empty();
-    List<Parameter> parameters = new ArrayList<>();
+    public Map<String, VariableScope> map = new HashMap<>();
+    public Optional<Type> returnType = Optional.empty();
+    public Optional<Type> ownerType = Optional.empty();
+    public List<Parameter> parameters = new ArrayList<>();
 
     public void add(SortedVar sortedVar) {
       TypeTranslation t = sortTranslator.translate(sortedVar.sort());

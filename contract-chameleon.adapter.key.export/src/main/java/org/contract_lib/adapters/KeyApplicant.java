@@ -36,7 +36,7 @@ public final class KeyApplicant extends ExportAdapter {
 
     ContractLibAst ast = generator.generateFromPath(fileName);
     SimpleKeyProviderTranslator trans = new SimpleKeyProviderTranslator(messageManager);
-    List<TranslationResult> results = trans.translateContractLibAstApplicant(ast);
+    List<TranslationResult> results = trans.translateContractLibAst(ast, false);
 
     return results;
   }

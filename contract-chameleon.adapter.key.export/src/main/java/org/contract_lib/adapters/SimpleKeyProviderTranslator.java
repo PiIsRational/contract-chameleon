@@ -115,8 +115,10 @@ public class SimpleKeyProviderTranslator {
 
   List<TranslationResult> results = new ArrayList<>();
 
-  public List<TranslationResult> translateContractLibAstApplicant(ContractLibAst ast) {
-
+  public List<TranslationResult> translateContractLibAst(
+          ContractLibAst ast, 
+          boolean provider
+  ) {
     results.add(keyTranslator.translate(ast));
     keyTranslator.getSorts().stream()
         .map(LogicTypeTranslation::new)
@@ -127,7 +129,7 @@ public class SimpleKeyProviderTranslator {
     //Creates the list of all provided abstractions
     ast.abstractions()
         .stream()
-        .forEach(this::translateAbstractionApplicant);
+        .forEach(a -> translateAbstraction(a, provider));
 
     //Populates all abstractions with their contracts
     ast.contracts()
@@ -139,26 +141,146 @@ public class SimpleKeyProviderTranslator {
     return results;
   }
 
-  public List<TranslationResult> translateContractLibAstProvider(ContractLibAst ast) {
+  public void translateContract(Contract contract) {
 
-    results.add(keyTranslator.translate(ast));
-    keyTranslator.getSorts().stream()
-        .map(LogicTypeTranslation::new)
-        .forEach(sortTranslator::store);
+    JavaMethodSignaturExtractor methodSignaturExtractor = new JavaMethodSignaturExtractor(contract, messageManager);
 
-    funcTranslator.store(keyTranslator.getCons());
+    System.err.println("INFO: Only contracts that are part of abstractions are supported at the moment.");
 
-    //Creates the list of all provided abstractions
-    ast.abstractions()
+    String classIdentifier = methodSignaturExtractor.ownerClassIdentifier();
+    String methodIdentifier = methodSignaturExtractor.methodName();
+
+    VariableScopeManager variableScope = getParameterScope(contract.formals());
+
+
+    //TODO: Check that owner matches
+    Optional<Type> ownerType = variableScope.ownerType;
+    Type returnType = getReturnT(
+    methodSignaturExtractor.isStatic(),
+            variableScope);
+
+    List<ExpressionPair> clausePairs = contract.pairs()
         .stream()
-        .forEach(this::translateAbstractionProvider);
+        .map(t -> this.translateExprPair(t, variableScope))
+        .collect(Collectors.toList());
 
-    //Populates all abstractions with their contracts
-    ast.contracts()
-        .stream()
-        .forEach(this::translateContract);
+    JmlSimpleExprClause preClause = new JmlSimpleExprClause()
+        .setExpression(joinPreContracts(clausePairs))
+        .setKind(REQUIRES);
 
-    return results;
+    JmlSimpleExprClause postClause = new JmlSimpleExprClause()
+        .setExpression(joinPostContracts(clausePairs))
+        .setKind(ENSURES);
+
+    List<JmlClause> disPreClause = disjointClauses(
+        REQUIRES,
+        contract.formals(),
+        this::isInPrecondition,
+        variableScope);
+
+    List<JmlClause> disPostClause = disjointClauses(
+        ENSURES,
+        contract.formals(),
+        this::isInPostcondition,
+        variableScope);
+
+    List<JmlClause> accessibleClause = translateAccessible(contract.formals(), variableScope);
+    List<JmlClause> assignableClause = translateAssignable(contract.formals(), variableScope);
+
+    NodeList<JmlClause> clauses = new NodeList<>();
+
+    clauses.add(preClause);
+    clauses.addAll(disPreClause);
+    clauses.add(postClause);
+    clauses.addAll(disPostClause);
+    objectCreated(contract.formals(), variableScope).ifPresent(clauses::add);
+    clauses.addAll(accessibleClause);
+    clauses.addAll(assignableClause);
+
+    JmlContract jmlContract = new JmlContract()
+        .setBehavior(Behavior.NORMAL)
+        .setClauses(clauses);
+
+    NodeList<JmlContract> contracts = NodeList.nodeList(jmlContract);
+
+    //TODO: declare default case, or allow annotation under which class the contract should be declared.
+    ClassOrInterfaceDeclaration abstractClassDeclaration = abstractAbstractions.get(classIdentifier);
+
+    if (abstractClassDeclaration == null) {
+      System.err.println(String.format("ERROR: The contract '%s', does not belong to any class, and is not translated.",
+          methodIdentifier));
+    }
+
+    ClassOrInterfaceDeclaration classImpl = abstractionImpementations.get(classIdentifier);
+
+    List<Parameter> parameters = getParameters(variableScope);
+
+    if (methodSignaturExtractor.isStatic()) {
+      System.err.println("Static constructor method found");
+      Statement returnStmt;
+      if (classImpl == null) {
+        returnStmt = new ReturnStmt("null");
+        returnStmt.setLineComment("NOTE: This should be never called, as it is only the interface!");
+      } else {
+
+        List<Expression> args = parameters.stream().map(p -> new NameExpr(p.getNameAsString()))
+            .collect(Collectors.toList());
+        EmptyStmt em = new EmptyStmt();
+
+        em.setLineComment("TODO: To implement by the user.");
+
+        NodeList<Statement> nl = NodeList.nodeList(em);
+        BlockStmt body = new BlockStmt(nl);
+        classImpl.addConstructor()
+            .setParameters(NodeList.nodeList(parameters))
+            .setBody(body)
+            .setContracts(contracts);
+
+        ObjectCreationExpr obc = new ObjectCreationExpr(
+            null,
+            new ClassOrInterfaceType(null, classImpl.getNameAsString()), NodeList.nodeList(args));
+        returnStmt = new ReturnStmt(obc);
+      }
+
+      NodeList<Statement> nl = NodeList.nodeList(returnStmt);
+      BlockStmt body = new BlockStmt(nl);
+
+      MethodDeclaration methodDeclAbstr = abstractClassDeclaration
+          .addMethod(methodIdentifier)
+          .setBody(body)
+          .setType(returnType)
+          .setParameters(NodeList.nodeList(parameters))
+          .setPublic(true)
+          .setStatic(true)
+          .setContracts(contracts);
+
+    } else {
+      MethodDeclaration methodDeclAbstr = abstractClassDeclaration
+          .addMethod(methodIdentifier)
+          .setBody(null)
+          .setType(returnType)
+          .setParameters(NodeList.nodeList(parameters))
+          .setPublic(true)
+          .setAbstract(true)
+          .setContracts(contracts);
+
+      //TODO: set default value when return type != void
+      Statement returnStmt = new ReturnStmt();
+      returnStmt.setLineComment("TODO: To implement by the user.");
+
+      NodeList<Statement> nl = NodeList.nodeList(returnStmt);
+
+      BlockStmt blueprintStatement = new BlockStmt(nl);
+
+      if (classImpl != null) {
+        MethodDeclaration methodDeclImpl = classImpl
+            .addMethod(methodIdentifier)
+            .setType(returnType)
+            .setParameters(NodeList.nodeList(parameters))
+            .setBody(blueprintStatement)
+            .setPublic(true);
+      }
+    }
   }
 
   private SimpleName getName(SelectorDec selector) {
@@ -190,7 +312,7 @@ public class SimpleKeyProviderTranslator {
         .forEach(s -> addGhostField(dec, s));
   }
 
-  void addGhostField(ClassOrInterfaceDeclaration dec, SelectorDec selector) {
+  private void addGhostField(ClassOrInterfaceDeclaration dec, SelectorDec selector) {
     TypeTranslation translation = sortTranslator.translate(selector.sort());
 
     FieldDeclaration fieldDec = new FieldDeclaration(
@@ -253,7 +375,6 @@ public class SimpleKeyProviderTranslator {
   }
 
   protected void addAbstractionFootprint(ClassOrInterfaceDeclaration dec) {
-
     FieldDeclaration fieldDec = new FieldDeclaration(
         NodeList.nodeList(),
         new ClassOrInterfaceType(
@@ -293,7 +414,6 @@ public class SimpleKeyProviderTranslator {
   }
 
   protected void addAccessibleDef(ClassOrInterfaceDeclaration dec, List<SelectorDec> selector) {
-
     /*
     // The footprint invariant may only depend on itself
     JmlClassAccessibleDeclaration accessFootprint = new JmlClassAccessibleDeclaration(
@@ -415,8 +535,8 @@ public class SimpleKeyProviderTranslator {
     return packageName + "." + className;
   }
 
-  private void translateAbstractionApplicant(
-      Abstraction abstraction) {
+  private void translateAbstraction(
+      Abstraction abstraction, boolean provider) {
     //TODO: Extract package name from abstraction or report warning
     String packageName = packageName(abstraction);
     String className = className(abstraction);
@@ -424,18 +544,7 @@ public class SimpleKeyProviderTranslator {
     System.err.println("Abstr Dec: " + getIdentifier(packageName, className));
 
     createAbstractClass(abstraction, packageName, className);
-  }
-
-  private void translateAbstractionProvider(Abstraction abstraction) {
-
-    //TODO: Extract package name from abstraction or report warning
-    String packageName = packageName(abstraction);
-    String className = className(abstraction);
-
-    System.err.println("Abstr Dec: " + getIdentifier(packageName, className));
-
-    createAbstractClass(abstraction, packageName, className);
-    createImplementationClass(abstraction, packageName, className);
+    if (provider) createImplementationClass(abstraction, packageName, className);
   }
 
   private ExpressionPair translateExprPair(PrePostPair pair, VariableTranslator scope) {
@@ -592,7 +701,7 @@ public class SimpleKeyProviderTranslator {
     return assignable;
   }
 
-  protected List<JmlClause> disjuntClauses(
+  protected List<JmlClause> disjointClauses(
       JmlClauseKind kind,
       List<Formal> formals,
       Predicate<ArgumentMode> filter,
@@ -620,14 +729,14 @@ public class SimpleKeyProviderTranslator {
             new JmlSimpleExprClause(kind,
                 null,
                 NodeList.nodeList(),
-                createDisjunctClause(a, b)));
+                createDisjointClause(a, b)));
       }
     }
 
     return res;
   }
 
-  private MethodCallExpr createDisjunctClause(Expression a, Expression b) {
+  private MethodCallExpr createDisjointClause(Expression a, Expression b) {
     return new MethodCallExpr(null, new SimpleName("\\disjoint"),
         NodeList.nodeList(
             new FieldAccessExpr(a, "footprint"),
@@ -650,148 +759,6 @@ public class SimpleKeyProviderTranslator {
 
   }
 
-  public void translateContract(Contract contract) {
-
-    JavaMethodSignaturExtractor methodSignaturExtractor = new JavaMethodSignaturExtractor(contract, messageManager);
-
-    System.err.println("INFO: Only contracts that are part of abstractions are supported at the moment.");
-
-    String classIdentifier = methodSignaturExtractor.ownerClassIdentifier();
-    String methodIdentifier = methodSignaturExtractor.methodName();
-
-    VariableScopeManager variableScope = getParameterScope(contract.formals());
-
-
-    //TODO: Check that owner matches
-    Optional<Type> ownerType = variableScope.ownerType;
-    Type returnType = getReturnT(
-    methodSignaturExtractor.isStatic(),
-            variableScope);
-
-    List<ExpressionPair> clausePairs = contract.pairs()
-        .stream()
-        .map(t -> this.translateExprPair(t, variableScope))
-        .collect(Collectors.toList());
-
-    JmlSimpleExprClause preClause = new JmlSimpleExprClause()
-        .setExpression(joinPreContracts(clausePairs))
-        .setKind(REQUIRES);
-
-    JmlSimpleExprClause postClause = new JmlSimpleExprClause()
-        .setExpression(joinPostContracts(clausePairs))
-        .setKind(ENSURES);
-
-    List<JmlClause> disPreClause = disjuntClauses(
-        REQUIRES,
-        contract.formals(),
-        this::isInPrecondition,
-        variableScope);
-
-    List<JmlClause> disPostClause = disjuntClauses(
-        ENSURES,
-        contract.formals(),
-        this::isInPostcondition,
-        variableScope);
-
-    List<JmlClause> accessibleClause = translateAccessible(contract.formals(), variableScope);
-    List<JmlClause> assignableClause = translateAssignable(contract.formals(), variableScope);
-
-    NodeList<JmlClause> clauses = new NodeList<>();
-
-    clauses.add(preClause);
-    clauses.addAll(disPreClause);
-    clauses.add(postClause);
-    clauses.addAll(disPostClause);
-    objectCreated(contract.formals(), variableScope).ifPresent(clauses::add);
-    clauses.addAll(accessibleClause);
-    clauses.addAll(assignableClause);
-
-    JmlContract jmlContract = new JmlContract()
-        .setBehavior(Behavior.NORMAL)
-        .setClauses(clauses);
-
-    NodeList<JmlContract> contracts = NodeList.nodeList(jmlContract);
-
-    //TODO: declare default case, or allow annotation under which class the contract should be declared.
-    ClassOrInterfaceDeclaration abstractClassDeclaration = abstractAbstractions.get(classIdentifier);
-
-    if (abstractClassDeclaration == null) {
-      System.err.println(String.format("ERROR: The contract '%s', does not belong to any class, and is not translated.",
-          methodIdentifier));
-    }
-
-    ClassOrInterfaceDeclaration classImpl = abstractionImpementations.get(classIdentifier);
-
-    List<Parameter> parameters = getParameters(variableScope);
-
-    if (methodSignaturExtractor.isStatic()) {
-      System.err.println("Static constructor method found");
-      Statement returnStmt;
-      if (classImpl == null) {
-        returnStmt = new ReturnStmt("null");
-        returnStmt.setLineComment("NOTE: This should be never called, as it is only the interface!");
-      } else {
-
-        List<Expression> args = parameters.stream().map(p -> new NameExpr(p.getNameAsString()))
-            .collect(Collectors.toList());
-        EmptyStmt em = new EmptyStmt();
-
-        em.setLineComment("TODO: To implement by the user.");
-
-        NodeList<Statement> nl = NodeList.nodeList(em);
-        BlockStmt body = new BlockStmt(nl);
-        classImpl.addConstructor()
-            .setParameters(NodeList.nodeList(parameters))
-            .setBody(body)
-            .setContracts(contracts);
-
-        ObjectCreationExpr obc = new ObjectCreationExpr(
-            null,
-            new ClassOrInterfaceType(null, classImpl.getNameAsString()), NodeList.nodeList(args));
-        returnStmt = new ReturnStmt(obc);
-      }
-
-      NodeList<Statement> nl = NodeList.nodeList(returnStmt);
-      BlockStmt body = new BlockStmt(nl);
-
-      MethodDeclaration methodDeclAbstr = abstractClassDeclaration
-          .addMethod(methodIdentifier)
-          .setBody(body)
-          .setType(returnType)
-          .setParameters(NodeList.nodeList(parameters))
-          .setPublic(true)
-          .setStatic(true)
-          .setContracts(contracts);
-
-    } else {
-      MethodDeclaration methodDeclAbstr = abstractClassDeclaration
-          .addMethod(methodIdentifier)
-          .setBody(null)
-          .setType(returnType)
-          .setParameters(NodeList.nodeList(parameters))
-          .setPublic(true)
-          .setAbstract(true)
-          .setContracts(contracts);
-
-      //TODO: set default value when return type != void
-      Statement returnStmt = new ReturnStmt();
-      returnStmt.setLineComment("TODO: To implement by the user.");
-
-      NodeList<Statement> nl = NodeList.nodeList(returnStmt);
-
-      BlockStmt blueprintStatement = new BlockStmt(nl);
-
-      if (classImpl != null) {
-        MethodDeclaration methodDeclImpl = classImpl
-            .addMethod(methodIdentifier)
-            .setType(returnType)
-            .setParameters(NodeList.nodeList(parameters))
-            .setBody(blueprintStatement)
-            .setPublic(true);
-      }
-    }
-  }
-
   protected Type getReturnT(boolean isStatic, VariableScopeManager variableScope) {
     return variableScope.returnType.orElseGet(VoidType::new);
   }
@@ -800,7 +767,7 @@ public class SimpleKeyProviderTranslator {
     return variableScope.parameters;
   }
 
-  Expression translateTerm(
+  private Expression translateTerm(
       Term term,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -818,7 +785,7 @@ public class SimpleKeyProviderTranslator {
         t -> this.translateAttributes(t, variableScope, indexFabric));
   }
 
-  Expression translateTermSpecConstant(
+  private Expression translateTermSpecConstant(
       Term.SpecConstant specCons,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -827,7 +794,7 @@ public class SimpleKeyProviderTranslator {
     return new BooleanLiteralExpr(false);
   }
 
-  Expression translateTermIdentifierAs(
+  private Expression translateTermIdentifierAs(
       Term.Identifier.IdentifierAs idAs,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -836,7 +803,7 @@ public class SimpleKeyProviderTranslator {
     return new BooleanLiteralExpr(false);
   }
 
-  Expression translateTermIdentifierValue(
+  private Expression translateTermIdentifierValue(
       Term.Identifier.IdentifierValue idV,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -854,7 +821,7 @@ public class SimpleKeyProviderTranslator {
     });
   }
 
-  Expression translateTermMethodApplication(
+  private Expression translateTermMethodApplication(
       Term.MethodApplication methAppl,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -874,7 +841,7 @@ public class SimpleKeyProviderTranslator {
     return trans.getJmlTerm(terms);
   }
 
-  Expression translateTermOld(
+  private Expression translateTermOld(
       Term.Old oldTerm,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -886,14 +853,14 @@ public class SimpleKeyProviderTranslator {
         NodeList.nodeList(content));
   }
 
-  Expression translateTermBooleanLiteral(
+  private Expression translateTermBooleanLiteral(
       Term.BooleanLiteral booleanLit,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
     return new BooleanLiteralExpr(booleanLit.value());
   }
 
-  Expression translateTermNumeralLiteral(
+  private Expression translateTermNumeralLiteral(
       Term.NumberLiteral numeralLit,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -904,7 +871,7 @@ public class SimpleKeyProviderTranslator {
     return new DoubleLiteralExpr(numeralLit.value());
   }
 
-  Expression translateTermLetBinding(
+  private Expression translateTermLetBinding(
       Term.LetBinding letBind,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -913,14 +880,14 @@ public class SimpleKeyProviderTranslator {
     return new BooleanLiteralExpr(false);
   }
 
-  JmlQuantifiedExpr.JmlBinder translateBinder(Quantor quantor) {
+  private JmlQuantifiedExpr.JmlBinder translateBinder(Quantor quantor) {
     return switch (quantor) {
       case Quantor.ALL -> JmlQuantifiedExpr.JmlDefaultBinder.FORALL;
       case Quantor.EXISTS -> JmlQuantifiedExpr.JmlDefaultBinder.EXISTS;
     };
   }
 
-  Expression translateQuantorBinding(
+  private Expression translateQuantorBinding(
       Term.QuantorBinding quantBind,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -965,7 +932,7 @@ public class SimpleKeyProviderTranslator {
     return top;
   }
 
-  Expression translateMatchBinding(
+  private Expression translateMatchBinding(
       Term.MatchBinding matchBind,
       VariableTranslator variableScope,
       IndexFab indexFabric) {
@@ -974,7 +941,7 @@ public class SimpleKeyProviderTranslator {
     return new BooleanLiteralExpr(false);
   }
 
-  Expression translateAttributes(
+  private Expression translateAttributes(
       Term.Attributes attributes,
       VariableTranslator variableScope,
       IndexFab indexFabric) {

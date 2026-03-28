@@ -479,7 +479,7 @@ public class SimpleKeyProviderTranslator {
       Abstraction abstraction,
       String packageName,
       String className) {
-    // Abstract Classe Definition
+    // Abstract Class Definition
     CompilationUnit abstractCompUnit = new CompilationUnit();
     abstractCompUnit.setPackageDeclaration(packageName);
 

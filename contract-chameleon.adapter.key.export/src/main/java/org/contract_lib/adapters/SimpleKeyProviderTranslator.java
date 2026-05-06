@@ -123,7 +123,7 @@ public class SimpleKeyProviderTranslator {
 
   private Set<DetailLevel> detailLevel = new HashSet<>();
 
-  List<TranslationResult> translateContractLibAstApplicant(ContractLibAst ast) {
+  public List<TranslationResult> translateContractLibAstApplicant(ContractLibAst ast) {
 
     results.add(keyTranslator.translate(ast));
     keyTranslator.getSorts().stream()
@@ -147,7 +147,7 @@ public class SimpleKeyProviderTranslator {
     return results;
   }
 
-  List<TranslationResult> translateContractLibAstProvider(ContractLibAst ast) {
+  public List<TranslationResult> translateContractLibAstProvider(ContractLibAst ast) {
 
     results.add(keyTranslator.translate(ast));
     keyTranslator.getSorts().stream()
@@ -180,11 +180,10 @@ public class SimpleKeyProviderTranslator {
 
     VariableScopeManager variableScope = getParameterScope(contract.formals());
 
-    Optional<Type> returnT = variableScope.returnType;
     //TODO: Check that owner matches
     Optional<Type> ownerType = variableScope.ownerType;
 
-    Type returnType = returnT.orElseGet(VoidType::new);
+    Type returnType = getReturnT(methodSignaturExtractor.isStatic(), variableScope);
 
     List<ExpressionPair> clausePairs = contract.pairs()
         .stream()
@@ -224,11 +223,11 @@ public class SimpleKeyProviderTranslator {
     objectCreated(contract.formals(), variableScope).ifPresent(clauses::addAll);
     //allows all parameters that are `INOUT`, to have new objects created in their footprint
     newElementsFreshClause(contract.formals(), variableScope).ifPresent(clauses::add);
-    clauses.addAll(accessibleClause);
+    clauses.addAll(assignableClause);
 
-    // only add assignableClause when there is a return type
+    // only add accessibleClause when there is a return type
     if (variableScope.returnType.isPresent()) {
-      clauses.addAll(assignableClause);
+      clauses.addAll(accessibleClause);
     }
 
     JmlContract jmlContract = new JmlContract()
@@ -246,6 +245,7 @@ public class SimpleKeyProviderTranslator {
     }
 
     ClassOrInterfaceDeclaration classImpl = abstractionImpementations.get(classIdentifier);
+    var parameters = getParameters(variableScope);
 
     if (methodSignaturExtractor.isStatic()) {
       System.err.println("Static constructor method found");
@@ -255,7 +255,7 @@ public class SimpleKeyProviderTranslator {
         returnStmt.setLineComment("NOTE: This should be never called, as it is only the interface!");
       } else {
 
-        List<Expression> args = variableScope.parameters.stream().map(p -> new NameExpr(p.getNameAsString()))
+        List<Expression> args = parameters.stream().map(p -> new NameExpr(p.getNameAsString()))
             .collect(Collectors.toList());
         EmptyStmt em = new EmptyStmt();
 
@@ -264,7 +264,7 @@ public class SimpleKeyProviderTranslator {
         NodeList<Statement> nl = NodeList.nodeList(em);
         BlockStmt body = new BlockStmt(nl);
         classImpl.addConstructor()
-            .setParameters(NodeList.nodeList(variableScope.parameters))
+            .setParameters(NodeList.nodeList(parameters))
             .setBody(body)
             .setContracts(contracts);
 
@@ -281,7 +281,7 @@ public class SimpleKeyProviderTranslator {
           .addMethod(methodIdentifier)
           .setBody(body)
           .setType(returnType)
-          .setParameters(NodeList.nodeList(variableScope.parameters))
+          .setParameters(NodeList.nodeList(parameters))
           .setPublic(true)
           .setStatic(true)
           .setContracts(contracts);
@@ -291,7 +291,7 @@ public class SimpleKeyProviderTranslator {
           .addMethod(methodIdentifier)
           .setBody(null)
           .setType(returnType)
-          .setParameters(NodeList.nodeList(variableScope.parameters))
+          .setParameters(NodeList.nodeList(parameters))
           .setPublic(true)
           .setAbstract(true)
           .setContracts(contracts);
@@ -308,7 +308,7 @@ public class SimpleKeyProviderTranslator {
         MethodDeclaration methodDeclImpl = classImpl
             .addMethod(methodIdentifier)
             .setType(returnType)
-            .setParameters(NodeList.nodeList(variableScope.parameters))
+            .setParameters(NodeList.nodeList(parameters))
             .setBody(blueprintStatement)
             .setPublic(true);
       }
@@ -653,18 +653,18 @@ public class SimpleKeyProviderTranslator {
   }
 
   private boolean isInPrecondition(ArgumentMode am) {
-    return am.equals(ArgumentMode.IN) | am.equals(ArgumentMode.INOUT);
+    return am.equals(ArgumentMode.IN) || am.equals(ArgumentMode.INOUT);
   }
 
   private boolean isInPostcondition(ArgumentMode am) {
     return true;
   }
 
-  private boolean isAssignable(ArgumentMode am) {
-    return am.equals(ArgumentMode.OUT) | am.equals(ArgumentMode.INOUT);
+  protected boolean isAssignable(ArgumentMode am) {
+    return am.equals(ArgumentMode.OUT) || am.equals(ArgumentMode.INOUT);
   }
 
-  private boolean isAccessible(ArgumentMode am) {
+  protected boolean isAccessible(ArgumentMode am) {
     return true;
   }
 
@@ -734,7 +734,7 @@ public class SimpleKeyProviderTranslator {
     return assignable;
   }
 
-  private Optional<JmlClause> newElementsFreshClause(
+  protected Optional<JmlClause> newElementsFreshClause(
       List<Formal> formals,
       VariableTranslator variableScope) {
 
@@ -815,7 +815,6 @@ public class SimpleKeyProviderTranslator {
   }
 
   protected Optional<List<JmlClause>> objectCreated(List<Formal> formals, VariableTranslator variableScope) {
-
     return formals.stream()
         .filter((f) -> isReference(f, variableScope))
         .filter((f) -> ArgumentMode.OUT.equals(f.argumentMode()))

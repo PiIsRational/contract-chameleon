@@ -22,7 +22,9 @@ public final class VerifastProvider extends ExportAdapter {
   public void performForPath(Path p, Dir finalDir) {
     try {
       ContractLibGenerator generator = new ContractLibGenerator(getMessageContext().getMessageManager());
-      SimpleVerifastTranslator trans = new SimpleVerifastTranslator(p, getMessageContext().getMessageManager());
+      SimpleVerifastTranslator trans = new SimpleVerifastTranslator(p,
+          getMessageContext().getMessageManager(),
+          this.getMessageContext());
 
       ContractLibAst ast = generator.generateFromPath(p);
       trans.translateContractLibAstProvider(ast)

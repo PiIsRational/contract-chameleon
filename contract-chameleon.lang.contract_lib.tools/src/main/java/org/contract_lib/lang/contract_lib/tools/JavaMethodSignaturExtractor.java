@@ -6,8 +6,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.HashSet;
 
-import java.util.function.Function;
-
 import org.contract_lib.contract_chameleon.error.ChameleonMessageManager;
 
 import org.contract_lib.lang.contract_lib.ast.Contract;
@@ -21,7 +19,7 @@ public final class JavaMethodSignaturExtractor {
   private static final String DEFAULT_RETURN_IDENTIFIER = "result";
   private static final String DEFAULT_THIS_IDENTIFIER = "this";
   private static final String DOT = ".";
-  private static final String TODO_MESSAGE = "//TODO: Implement method '%s'.";
+  private static final String TODO_MESSAGE = "// TODO: Implement '%s'.";
 
   private String contractIdentifier;
   private String methodName;

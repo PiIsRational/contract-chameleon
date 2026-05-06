@@ -75,7 +75,8 @@ public final record AllIntQuantorTranslation() implements QuantorTranslation {
     VeriFastPredicate pred = new VeriFastPredicate(
         name,
         arguments,
-        Optional.of(predicateExpression));
+        Optional.of(predicateExpression),
+        Optional.empty());
 
     helperTranslator.addHelper(pred);
     predicateList.add(new VeriFastExpression.Predicate(

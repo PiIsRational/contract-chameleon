@@ -22,7 +22,9 @@ import org.contract_lib.lang.contract_lib.ast.Symbol;
 
 import org.contract_lib.lang.verifast.ast.VeriFastExpression;
 import org.contract_lib.lang.verifast.ast.VeriFastArgument;
+import org.contract_lib.lang.verifast.ast.VeriFastComment;
 import org.contract_lib.lang.verifast.ast.VeriFastType;
+import org.contract_lib.lang.verifast.ast.VeriFastExpression.Predicate;
 import org.contract_lib.lang.verifast.ast.VeriFastPredicate;
 
 public final class PredicateTranslator {
@@ -34,6 +36,10 @@ public final class PredicateTranslator {
   private final Map<String, List<VeriFastArgument>> predicates;
   private final TypeTranslator typeTranslator;
   private final List<VeriFastArgument> availableArguments;
+
+  // This flag removes the this from this.pred(arg1, arg2),
+  // so verifast can load it properly. Otherwise vf behaves quite bugy.
+  private final boolean removeOwnerThis = true;
 
   public PredicateTranslator(
       ChameleonMessageManager messageHandler,
@@ -85,7 +91,8 @@ public final class PredicateTranslator {
     }
   }
 
-  public List<VeriFastPredicate> translatePredicateDef(String owner, Constructor constructor) {
+  public List<VeriFastPredicate> translatePredicateDef(String owner, Constructor constructor,
+      Optional<VeriFastComment.Inline> comment) {
     List<VeriFastArgument> selectors = constructor.selectors()
         .stream()
         .map(this::translateSelector)
@@ -99,7 +106,8 @@ public final class PredicateTranslator {
     return List.of(new VeriFastPredicate(
         PREDICATE_NAME,
         selectors,
-        Optional.empty()));
+        Optional.empty(),
+        comment));
   }
 
   public List<VeriFastExpression> createPredicates(
@@ -140,23 +148,28 @@ public final class PredicateTranslator {
     }
 
     if (assignment) {
-      return Optional.of(new VeriFastExpression.Predicate(
-          Optional.of(new VeriFastExpression.Variable(owner)),
-          PREDICATE_NAME,
-          this.predicates.get(type)
-              .stream()
-              .map((field) -> this.createTranslation(owner, field, old))
-              .map(this::generateVariableAssignment)
-              .collect(Collectors.toList())));
+      return Optional.of(
+          this.removeThisOwner(
+              new VeriFastExpression.Predicate(
+                  Optional.of(new VeriFastExpression.Variable(owner)),
+                  PREDICATE_NAME,
+                  this.predicates.get(type)
+                      .stream()
+                      .map((field) -> this.createTranslation(owner, field, old))
+                      .map(this::generateVariableAssignment)
+                      .collect(Collectors.toList()))));
     } else {
-      return Optional.of(new VeriFastExpression.Predicate(
-          Optional.of(new VeriFastExpression.Variable(owner)),
-          PREDICATE_NAME,
-          this.predicates.get(type)
-              .stream()
-              .map((field) -> this.createTranslation(owner, field, old))
-              .map(PredicateTranslation::generateVariable)
-              .collect(Collectors.toList())));
+      return Optional.of(
+          this.removeThisOwner(
+              new VeriFastExpression.Predicate(
+                  Optional.of(new VeriFastExpression.Variable(owner)),
+                  PREDICATE_NAME,
+                  this.predicates.get(type)
+                      .stream()
+                      .map((field) -> this.createTranslation(owner, field, old))
+
+                      .map(PredicateTranslation::generateVariable)
+                      .collect(Collectors.toList()))));
     }
   }
 
@@ -237,5 +250,18 @@ public final class PredicateTranslator {
     System.err.println("The term cannot be translated, as it is defined as a predicate: " + term);
     //TODO: Create error message
     return null;
+  }
+
+  private Predicate removeThisOwner(Predicate predicate) {
+    if (removeOwnerThis && checkHasThisOwner(predicate)) {
+      return new Predicate(Optional.empty(), predicate.predicateName(), predicate.arguments());
+    }
+    return predicate;
+  }
+
+  private boolean checkHasThisOwner(Predicate predicate) {
+    return predicate.owner()
+        .map((o) -> o.variable().equals("this"))
+        .orElse(false);
   }
 }

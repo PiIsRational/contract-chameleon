@@ -9,5 +9,6 @@ public record VeriFastClass(
     List<VeriFastConstructor> constructors,
     List<VeriFastMethod> methods,
     boolean isAbstract,
-    Optional<String> implFrom) {
+    Optional<String> implFrom,
+    List<VeriFastComment> classBodyComments) {
 }

@@ -1,32 +1,18 @@
-/*dependencies {
-   
-  runtimeOnly project(":contract-chameleon.adapter.verifast.export")
-  runtimeOnly project(":contract-chameleon.adapter.key.import")
-}*/
+apply from: "functions.gradle" 
+apply from: "tools.gradle" 
+apply from: "key-ci.gradle" 
+apply from: "verifast.gradle" 
 
-ext.integrationTasks = []
+apply from: "encapsulation.gradle" 
 
-def runIntegrationTest(String taskName, List<String> argList) {
-    def appModule = ":contract-chameleon.cl"
-    tasks.register(taskName, JavaExec) {
-        group = "application"
-        description = "Run task '${taskName}'"
-        dependsOn "${appModule}:classes"
 
-        def sub = project(appModule)
-        classpath = sub.sourceSets.main.runtimeClasspath +
-          project(":contract-chameleon.adapter.key.export").sourceSets.main.runtimeClasspath +
-          project(":contract-chameleon.adapter.key.import").sourceSets.main.runtimeClasspath +
-          project(":contract-chameleon.adapter.verifast.export").sourceSets.main.runtimeClasspath
-        mainClass.set(sub.application.mainClass)
-
-        args = argList
-    }
-    ext.integrationTasks << taskName
-}
 def mode = "OVERWRITE"
+def log = "INFO"
 
 // - Integration test specifications
+
+runIntegrationTest("help-core", ["--help"])
+runIntegrationTest("help-vf-applicant", ["verifast-applicant", "--help"])
 
 // VeriFast export
 
@@ -102,125 +88,3 @@ runIntegrationTest("key-import-examples-stack", ["key-import", "./import-from-ke
 
 runIntegrationTest("key-import-features", ["key-import", "./import-from-key/features/"])
 runIntegrationTest("key-import-theories", ["key-import", "./import-from-key/theories/"])
-
-
-
-// - Job for all integration tests joined
-
-tasks.register('run-integration-tests') {
-    group = "application"
-    description = "Run all integration tests"
-    //dependsOn("vf-applicant", "vf-provider", "key-applicant", "key-provider")
-    dependsOn integrationTasks
-}
-
-// - Check that the tools for the integration tests exist
-//   - KeY
-//   - CI for KeY
-//   - VeriFast
-
-tasks.register('check-tools-files') {
-
-  println "Root dir: ${rootProject.rootDir}"
-  println "Project dir: ${project.projectDir}"
-  println "----"
-
-  def key = project.findProperty("custom_key_exe") ?: contract_chameleon_key_exe
-  def ci_key = project.findProperty("custom_key_exe") ?: contract_chameleon_ci_key_exe
-  def verifast = project.findProperty("custom_verifast_exe") ?: contract_chameleon_verifast_exe
-
-  println "Default KeY executable: $contract_chameleon_key_exe"
-  println "Default VeriFast executable: $contract_chameleon_verifast_exe"
-  println "Default CI Tool executable: $contract_chameleon_ci_key_exe"
-
-  println "Using $key"
-  println "Using $ci_key"
-  println "Using $verifast"
-
-  println "----"
-
-  def key_file = new File(rootProject.rootDir, key)
-  def ci_key_file = new File(rootProject.rootDir, ci_key)
-  def verifast_file = new File(rootProject.rootDir, verifast)
-
-  println key_file.exists() ? "✅ KeY exists: ${key_file.absolutePath}" : "❌ KeY not found: ${key_file.absolutePath}"
-  println ci_key_file.exists() ? "✅ KeY CI exists: ${ci_key_file.absolutePath}" : "❌ KeY CI not found: ${ci_key_file.absolutePath}"
-  println verifast_file.exists() ? "✅ VeriFast exists: ${verifast_file.absolutePath}" : "❌ VeriFast not found: ${verifast_file.absolutePath}"
-}
-
-tasks.register("run-help-verifast", Exec) {
-  def verifast = project.findProperty("custom_verifast_exe") ?: contract_chameleon_verifast_exe
-  def verifast_file = new File(rootProject.rootDir, verifast)
-
-  commandLine verifast_file.absolutePath, "--help"
-
-  dependsOn 'check-tools-files'
-}
-
-tasks.register("run-help-key-ci", Exec) {
-  def key = project.findProperty("custom_key_exe") ?: contract_chameleon_key_exe
-  def ci_key = project.findProperty("custom_key_exe") ?: contract_chameleon_ci_key_exe
-  def key_file = new File(rootProject.rootDir, key)
-  def ci_key_file = new File(rootProject.rootDir, ci_key)
-
-  commandLine "java", "-cp", "$ci_key_file:$key_file", "io.github.wadoon.keycitool.CheckerKt", "--help"
-
-  dependsOn 'check-tools-files'
-}
-
-tasks.register("run-help-key", Exec) {
-
-  def key = project.findProperty("custom_key_exe") ?: contract_chameleon_key_exe
-  def key_file = new File(rootProject.rootDir, key)
-
-  commandLine "java", "-jar", key_file.absolutePath, "--help"
-  ignoreExitValue = true
-
-  dependsOn 'check-tools-files'
-}
-
-tasks.register("run-help-all") {
-    dependsOn 'run-help-key', 'run-help-key-ci', 'run-help-verifast'
-}
-
-// - Check the input for the tests
-
-ext.key_ci_tests = []
-
-def check_key_files(String taskName, String path_to_files) {
-  tasks.register(taskName, Exec) {
-    group = "KeY CI"
-    def key = project.findProperty("custom_key_exe") ?: contract_chameleon_key_exe
-    def ci_key = project.findProperty("custom_key_exe") ?: contract_chameleon_ci_key_exe
-    def key_file = new File(rootProject.rootDir, key)
-    def ci_key_file = new File(rootProject.rootDir, ci_key)
-    //If this fails, it would be goood to create the $buildDir direcory manually
-    def statistic_file = "$buildDir/$taskName-statistic.json"
-
-    commandLine "java", "-cp", "$ci_key_file:$key_file", "io.github.wadoon.keycitool.CheckerKt", path_to_files, "-s", statistic_file
-  }
-  ext.key_ci_tests << taskName
-}
-
-// Check all key projects specified in "key_ci_files.txt"
-
-def key_ci_files = file("key_ci_files.txt")
-if (key_ci_files.exists()) {
-  println "KeY CI not given!"
-  def key_ci_lines = key_ci_files.readLines()
-
-  key_ci_lines.each { line -> 
-    def taskName = "key_ci-check-" + line.replace("/", "_")
-    println "KeY check task: $taskName"
-    check_key_files(taskName, line)
-  }
-} 
-
-tasks.register("key_ci-check-all") {
-  group = "KeY CI"
-  dependsOn key_ci_tests
-}
-
-
-
-

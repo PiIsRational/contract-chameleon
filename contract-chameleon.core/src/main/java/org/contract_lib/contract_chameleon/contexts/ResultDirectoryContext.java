@@ -80,20 +80,10 @@ public class ResultDirectoryContext implements SharedContextManager.InterfacePro
 
     public void writeResult(TranslationResult result) {
 
-      if (Files.isDirectory(path)) {
-        sharedContextManager
-            .getMessageContext()
-            .logInfo(String.format("Directory at %s does already exist.", path));
-      } else {
-        try {
-          Files.createDirectories(path);
-        } catch (IOException e) {
-          sharedContextManager
-              .getMessageContext()
-              .logException(e);
-        }
-      }
-      writeFile(result.fileName(), result.fileEnding(), result::writeTo);
+      Dir finalDir = result.extendSubDirectory()
+          .map((s) -> this.addSubDirectories(s)).orElse(this);
+
+      finalDir.writeFile(result.fileName(), result.fileEnding(), result::writeTo);
     }
 
     /** Write a result to the file.
@@ -103,6 +93,8 @@ public class ResultDirectoryContext implements SharedContextManager.InterfacePro
      * @param content The content that should be written.
     */
     public void writeFile(String filename, String fileEnding, WritableResult content) {
+      createDirs();
+
       Path path = Paths.get(this.path.toString(), filename + fileEnding);
 
       // Handle overrride mode when file already exists.
@@ -137,6 +129,23 @@ public class ResultDirectoryContext implements SharedContextManager.InterfacePro
     public Dir addSubDirectories(String... components) {
       Path path = Paths.get(this.path.toString(), components);
       return new Dir(path);
+    }
+
+    /// Create all necessary intermediate directories to write files to this directory.
+    private void createDirs() {
+      if (Files.isDirectory(path)) {
+        sharedContextManager
+            .getMessageContext()
+            .logInfo(String.format("Directory at %s does already exist.", path));
+      } else {
+        try {
+          Files.createDirectories(path);
+        } catch (IOException e) {
+          sharedContextManager
+              .getMessageContext()
+              .logException(e);
+        }
+      }
     }
   }
 

@@ -7,7 +7,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -36,7 +35,7 @@ public class AdapterMap<T extends AdapterId> implements Iterable<java.util.Map.E
     String adapterList = sortedElements()
         .map(this::printListElement)
         .collect(Collectors.joining(System.lineSeparator()));
-    return "Adapters" + System.lineSeparator() + adapterList;
+    return adapterList;
   }
 
   public Stream<Map.Entry<String, T>> sortedElements() {

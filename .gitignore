@@ -1,5 +1,6 @@
 # Ignore Gradle project-specific cache directory
 .gradle
+**/.factorypath
 
 # Ignore build files of examples
 **/key-provider

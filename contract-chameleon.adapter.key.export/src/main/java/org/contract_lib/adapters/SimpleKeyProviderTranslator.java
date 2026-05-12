@@ -20,6 +20,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -263,10 +264,11 @@ public class SimpleKeyProviderTranslator {
 
         NodeList<Statement> nl = NodeList.nodeList(em);
         BlockStmt body = new BlockStmt(nl);
-        classImpl.addConstructor()
+        CallableDeclaration<?> constructorDecl = classImpl.addConstructor()
             .setParameters(NodeList.nodeList(parameters))
             .setBody(body)
             .setContracts(contracts);
+        annotateMethodDecl(constructorDecl);
 
         ObjectCreationExpr obc = new ObjectCreationExpr(
             null,
@@ -277,7 +279,7 @@ public class SimpleKeyProviderTranslator {
       NodeList<Statement> nl = NodeList.nodeList(returnStmt);
       BlockStmt body = new BlockStmt(nl);
 
-      MethodDeclaration methodDeclAbstr = abstractClassDeclaration
+      CallableDeclaration<?> methodDeclAbstr = abstractClassDeclaration
           .addMethod(methodIdentifier)
           .setBody(body)
           .setType(returnType)
@@ -285,9 +287,9 @@ public class SimpleKeyProviderTranslator {
           .setPublic(true)
           .setStatic(true)
           .setContracts(contracts);
-
+      annotateMethodDecl(methodDeclAbstr);
     } else {
-      MethodDeclaration methodDeclAbstr = abstractClassDeclaration
+      CallableDeclaration<?> methodDeclAbstr = abstractClassDeclaration
           .addMethod(methodIdentifier)
           .setBody(null)
           .setType(returnType)
@@ -295,6 +297,7 @@ public class SimpleKeyProviderTranslator {
           .setPublic(true)
           .setAbstract(true)
           .setContracts(contracts);
+      annotateMethodDecl(methodDeclAbstr);
 
       //TODO: set default value when return type != void
       Statement returnStmt = new ReturnStmt();
@@ -305,12 +308,13 @@ public class SimpleKeyProviderTranslator {
       BlockStmt blueprintStatement = new BlockStmt(nl);
 
       if (classImpl != null) {
-        MethodDeclaration methodDeclImpl = classImpl
+        CallableDeclaration<?> methodDeclImpl = classImpl
             .addMethod(methodIdentifier)
             .setType(returnType)
             .setParameters(NodeList.nodeList(parameters))
             .setBody(blueprintStatement)
             .setPublic(true);
+        annotateMethodDecl(methodDeclImpl);
       }
     }
   }
@@ -318,6 +322,8 @@ public class SimpleKeyProviderTranslator {
   private SimpleName getName(SelectorDec selector) {
     return new SimpleName(selector.symbol().identifier());
   }
+
+  protected void annotateMethodDecl(CallableDeclaration<?> decl) {}
 
   private boolean abstractionBuilder(
       Abstraction abstraction,
@@ -345,7 +351,6 @@ public class SimpleKeyProviderTranslator {
   }
 
   private void addGhostField(ClassOrInterfaceDeclaration dec, SelectorDec selector) {
-
     TypeTranslation translation = sortTranslator.translate(selector.sort());
 
     FieldDeclaration fieldDec = new FieldDeclaration(
@@ -451,6 +456,8 @@ public class SimpleKeyProviderTranslator {
     dec.addMember(footprintInv);
   }
 
+  protected void annotateClassOrInterfaceDecl(ClassOrInterfaceDeclaration decl) {}
+
   protected void addAccessibleDef(ClassOrInterfaceDeclaration dec, List<SelectorDec> selector) {
 
     // All invariants have to relay on footprint
@@ -498,6 +505,7 @@ public class SimpleKeyProviderTranslator {
         .addClass(className)
         .setPublic(true)
         .setAbstract(true);
+    annotateClassOrInterfaceDecl(abstractClassDeclaration);
 
     if (!abstractionBuilder(abstraction, abstractClassDeclaration)) {
       System.err.println("Abort abstraction translation.");
@@ -529,6 +537,7 @@ public class SimpleKeyProviderTranslator {
         .addClass(className + IMPLEMENTATION_SUFFIX)
         .setPublic(true)
         .addExtendedType(parentType);
+    annotateClassOrInterfaceDecl(classImpl);
 
     addImplementationFootprint(classImpl, abstraction);
 
